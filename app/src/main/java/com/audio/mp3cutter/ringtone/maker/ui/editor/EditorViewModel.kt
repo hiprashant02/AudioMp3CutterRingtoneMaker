@@ -203,7 +203,19 @@ class EditorViewModel @Inject constructor(
                                 _uiState.value = _uiState.value.copy(currentPosition = currentPos)
                             }
                         } else {
-                            _uiState.value = _uiState.value.copy(currentPosition = currentPos)
+                            // Normal playback - stop at selection end
+                            val endMs = _uiState.value.selectionEndMs
+                            if (currentPos >= endMs) {
+                                // Stop playback at selection end
+                                player.pause()
+                                player.seekTo(endMs.toInt())
+                                _uiState.value = _uiState.value.copy(
+                                    currentPosition = endMs,
+                                    isPlaying = false
+                                )
+                            } else {
+                                _uiState.value = _uiState.value.copy(currentPosition = currentPos)
+                            }
                         }
                     }
                 }
@@ -219,12 +231,12 @@ class EditorViewModel @Inject constructor(
 
     // Selection functions
     fun updateSelectionStart(progress: Float) {
-        val newStart = progress.coerceIn(0f, _uiState.value.selectionEndProgress - 0.01f)
+        val newStart = progress.coerceIn(0f, _uiState.value.selectionEndProgress)
         _uiState.value = _uiState.value.copy(selectionStartProgress = newStart)
     }
 
     fun updateSelectionEnd(progress: Float) {
-        val newEnd = progress.coerceIn(_uiState.value.selectionStartProgress + 0.01f, 1f)
+        val newEnd = progress.coerceIn(_uiState.value.selectionStartProgress, 1f)
         _uiState.value = _uiState.value.copy(selectionEndProgress = newEnd)
     }
 

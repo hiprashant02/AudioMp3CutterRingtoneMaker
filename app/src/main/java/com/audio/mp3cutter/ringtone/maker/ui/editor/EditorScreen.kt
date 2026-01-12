@@ -269,8 +269,32 @@ private fun WaveformSection(
     var scale by remember { mutableFloatStateOf(1f) }
     val scrollState = rememberScrollState()
 
-    // Disable auto-scroll - let user control scrolling manually
-    // Auto-scroll was causing issues with handle dragging
+    // Auto-scroll state management
+    var isAutoScrolling by remember { mutableStateOf(false) }
+    var autoScrollDirection by remember { mutableIntStateOf(0) } // -1=left, 0=none, 1=right
+    var autoScrollSpeed by remember { mutableFloatStateOf(0f) }
+    var autoScrollHandleType by remember { mutableIntStateOf(0) } // 0=none, 1=start, 2=end
+    
+    // Track last scroll value to calculate delta
+    var lastScrollValue by remember { mutableFloatStateOf(0f) }
+    
+    // Auto-scroll coroutine - continuously scrolls while dragging near edges
+    // Also adjusts handle position to keep it synchronized with scroll
+    LaunchedEffect(isAutoScrolling, autoScrollDirection, autoScrollSpeed) {
+        while (isAutoScrolling && autoScrollDirection != 0) {
+            val scrollBefore = scrollState.value.toFloat()
+            val scrollAmount = autoScrollSpeed * autoScrollDirection
+            
+            // Use immediate scroll (not animated) for responsive, lag-free updates
+            scrollState.scrollBy(scrollAmount)
+            
+            // Calculate actual scroll delta
+            val scrollDelta = scrollState.value.toFloat() - scrollBefore
+            lastScrollValue = scrollDelta
+            
+            delay(16) // ~60fps
+        }
+    }
 
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
@@ -358,29 +382,6 @@ private fun WaveformSection(
         ) {
 
             val viewportWidth = constraints.maxWidth.toFloat()
-            
-            // Separate speed and callback to prevent LaunchedEffect restart on every drag
-            var autoScrollSpeed by remember { mutableFloatStateOf(0f) }
-            var autoScrollUpdateCallback by remember { mutableStateOf<((Float) -> Unit)?>(null) }
-            var isAutoScrollActive by remember { mutableStateOf(false) }
-            
-            // Auto-scroll logic - ONLY scrolls view, never updates selection
-            LaunchedEffect(autoScrollSpeed != 0f) {
-                val wasActive = isAutoScrollActive
-                isAutoScrollActive = autoScrollSpeed != 0f
-                android.util.Log.d("AutoScrollLoop", "LaunchedEffect STARTED: speed=$autoScrollSpeed, wasActive=$wasActive, nowActive=$isAutoScrollActive")
-                
-                while (autoScrollSpeed != 0f && isActive) {
-                    val speed = autoScrollSpeed
-                    val scrolled = scrollState.scrollBy(speed)
-                    android.util.Log.d("AutoScrollLoop", "SCROLLING: requested=$speed, actualScrolled=$scrolled, totalScroll=${scrollState.value}, loopActive=$isActive")
-                    // NO selection update here - let drag handle it
-                    delay(16)
-                }
-                
-                isAutoScrollActive = false
-                android.util.Log.d("AutoScrollLoop", "LaunchedEffect ENDED: finalSpeed=$autoScrollSpeed, isActive=$isActive")
-            }
 
             // Horizontally scrollable waveform with integrated selection handles
             Box(
@@ -401,11 +402,11 @@ private fun WaveformSection(
                     onSelectionEndChange = onSelectionEndChange,
                     scrollState = scrollState,
                     viewportWidth = viewportWidth,
-                    isAutoScrollActive = isAutoScrollActive,
-                    onAutoScrollRequest = { speed, updateCallback -> 
-                        android.util.Log.d("AutoScrollRequest", "REQUEST: speed=$speed, currentSpeed=$autoScrollSpeed")
+                    onAutoScrollUpdate = { isScrolling, direction, speed, handleType ->
+                        isAutoScrolling = isScrolling
+                        autoScrollDirection = direction
                         autoScrollSpeed = speed
-                        autoScrollUpdateCallback = updateCallback
+                        autoScrollHandleType = handleType
                     },
                     modifier = Modifier
                         .fillMaxHeight()
@@ -472,8 +473,7 @@ private fun WaveformWithSelection(
 
     scrollState: ScrollState,
     viewportWidth: Float,
-    isAutoScrollActive: Boolean,
-    onAutoScrollRequest: (Float, ((Float) -> Unit)?) -> Unit,
+    onAutoScrollUpdate: (isScrolling: Boolean, direction: Int, speed: Float, handleType: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentProgressState = rememberUpdatedState(progress)
@@ -482,6 +482,13 @@ private fun WaveformWithSelection(
     val barSpacingDp = 2.dp
     val totalBarWidthDp = barWidthDp + barSpacingDp
     val handleWidth = 28.dp
+    
+    // Edge zone for auto-scroll trigger (80dp from edges)
+    val edgeZonePx = with(density) { 80.dp.toPx() }
+    val baseScrollSpeed = with(density) { 10.dp.toPx() } // Base speed for auto-scroll
+    
+    // Track scroll position to detect scroll changes
+    val previousScrollValue = remember { mutableFloatStateOf(scrollState.value.toFloat()) }
 
     // Calculate total width based on data and scale
     val baseBarCount = waveformData.size.coerceIn(100, 500)
@@ -504,17 +511,33 @@ private fun WaveformWithSelection(
         }
     }
 
-
+    // Local state for instant updates during dragging (bypasses ViewModel)
+    var isDraggingStart by remember { mutableStateOf(false) }
+    var isDraggingEnd by remember { mutableStateOf(false) }
+    var localSelectionStart by remember { mutableFloatStateOf(selectionStart) }
+    var localSelectionEnd by remember { mutableFloatStateOf(selectionEnd) }
+    
+    // Sync local state with props when not dragging
+    LaunchedEffect(selectionStart) {
+        if (!isDraggingStart) localSelectionStart = selectionStart
+    }
+    LaunchedEffect(selectionEnd) {
+        if (!isDraggingEnd) localSelectionEnd = selectionEnd
+    }
+    
+    // Use local state during drag, otherwise use props
+    val activeSelectionStart = if (isDraggingStart) localSelectionStart else selectionStart
+    val activeSelectionEnd = if (isDraggingEnd) localSelectionEnd else selectionEnd
 
     // Track current positions with rememberUpdatedState for drag callbacks
     val totalWidthPx = with(density) { totalWidth.toPx() }
-    val currentStartPosition by rememberUpdatedState(selectionStart)
-    val currentEndPosition by rememberUpdatedState(selectionEnd)
+    val currentStartPosition by rememberUpdatedState(activeSelectionStart)
+    val currentEndPosition by rememberUpdatedState(activeSelectionEnd)
 
 
-    // Calculate handle time values
-    val startTimeMs = (duration * selectionStart).toLong()
-    val endTimeMs = (duration * selectionEnd).toLong()
+    // Calculate handle time values using active selection (updates during drag)
+    val startTimeMs = (duration * activeSelectionStart).toLong()
+    val endTimeMs = (duration * activeSelectionEnd).toLong()
 
     Column(modifier = modifier.width(totalWidth)) {
         // Waveform with handles
@@ -565,8 +588,8 @@ private fun WaveformWithSelection(
                 if (sampledData.isEmpty()) return@Canvas
 
                 // Clean selection glow - NO dark overlay on unselected
-                val selectionStartX = selectionStart * size.width
-                val selectionEndX = selectionEnd * size.width
+                val selectionStartX = activeSelectionStart * size.width
+                val selectionEndX = activeSelectionEnd * size.width
 
                 // Subtle GLOW on selected region instead of dark unselected
                 drawRect(
@@ -589,7 +612,7 @@ private fun WaveformWithSelection(
                     val x = index * totalBarWidth
                     val barProgress = index.toFloat() / sampledData.size
 
-                    val isInSelection = barProgress >= selectionStart && barProgress <= selectionEnd
+                    val isInSelection = barProgress >= activeSelectionStart && barProgress <= activeSelectionEnd
                     val barColor = if (isInSelection) {
                         // Selected region: bright gradient (purple to cyan)
                         Brush.verticalGradient(
@@ -641,48 +664,74 @@ private fun WaveformWithSelection(
             }
 
             // Start Handle - positioned on waveform (full height, no time text inside)
-            val startOffsetX = (totalWidth - handleWidth) * selectionStart
+            val startOffsetX = (totalWidth - handleWidth) * activeSelectionStart
             Box(
                 modifier = Modifier
                     .offset(x = startOffsetX)
                     .width(handleWidth)
                     .fillMaxHeight()
-                    .pointerInput(totalWidthPx) {
+                    .pointerInput(totalWidthPx, edgeZonePx, baseScrollSpeed, viewportWidth) {
                         detectDragGestures(
-                            onDragEnd = { onAutoScrollRequest(0f, null) },
-                            onDragCancel = { onAutoScrollRequest(0f, null) }
+                            onDragStart = {
+                                // Start dragging - use local state
+                                isDraggingStart = true
+                                localSelectionStart = currentStartPosition
+                                previousScrollValue.floatValue = scrollState.value.toFloat()
+                            },
+                            onDragEnd = { 
+                                // Commit to ViewModel and stop auto-scroll
+                                isDraggingStart = false
+                                onSelectionStartChange(localSelectionStart)
+                                onSeekAndPlay(localSelectionStart) // Seek and play only on drag end
+                                onAutoScrollUpdate(false, 0, 0f, 0)
+                            },
+                            onDragCancel = { 
+                                // Revert and stop
+                                isDraggingStart = false
+                                localSelectionStart = selectionStart
+                                onAutoScrollUpdate(false, 0, 0f, 0)
+                            }
                         ) { change, dragAmount ->
                             change.consume()
                             
-                            // ALWAYS update selection from drag - this is the ONLY source
+                            // Detect scroll change during drag
+                            val currentScroll = scrollState.value.toFloat()
+                            val scrollDelta = currentScroll - previousScrollValue.floatValue
+                            previousScrollValue.floatValue = currentScroll
+                            
+                            // Update selection from drag + compensation for scroll
+                            // When scrolling right (+), handle should also move right (+) to stay in place
                             val dragProgress = dragAmount.x / totalWidthPx
-                            val newPos = (currentStartPosition + dragProgress).coerceIn(0f, currentEndPosition - 0.02f)
-                            onSelectionStartChange(newPos)
-                            onSeekAndPlay(newPos)
-
-                            // Auto-scroll based on FINGER position on screen
-                            // But ONLY if there's room to scroll in that direction!
-                            val fingerX = change.position.x
-                            val threshold = 300f
-                            val scrollSpeed = 120f
-                            val currentScroll = scrollState.value
-                            val maxScroll = scrollState.maxValue
-
-                            android.util.Log.d("AutoScroll", "DRAG EVENT: fingerX=$fingerX, currentScroll=$currentScroll, maxScroll=$maxScroll, viewport=$viewportWidth, isActive=$isAutoScrollActive")
-
-                            if (fingerX < threshold && currentScroll > 0) {
-                                // Near left edge AND can scroll left
-                                android.util.Log.d("AutoScroll", ">>> REQUESTING LEFT SCROLL (fingerX=$fingerX < $threshold, canScroll=${currentScroll > 0})")
-                                onAutoScrollRequest(-scrollSpeed, null)
-                           } else if (fingerX > viewportWidth - threshold && currentScroll < maxScroll) {
-                                // Near right edge AND can scroll right
-                                android.util.Log.d("AutoScroll", ">>> REQUESTING RIGHT SCROLL (fingerX=$fingerX > ${viewportWidth - threshold}, canScroll=${currentScroll < maxScroll})")
-                                onAutoScrollRequest(scrollSpeed, null)
-                            } else {
-                                android.util.Log.d("AutoScroll", ">>> IN SAFE ZONE OR CAN'T SCROLL")
-                                onAutoScrollRequest(0f, null)
+                            val scrollCompensation = scrollDelta / totalWidthPx
+                            val combinedProgress = dragProgress + scrollCompensation
+                            
+                            val newPos = (currentStartPosition + combinedProgress).coerceIn(0f, currentEndPosition)
+                            localSelectionStart = newPos
+                            
+                            // Calculate handle's screen position (relative to viewport)
+                            val handlePosInWaveform = newPos * totalWidthPx
+                            val handleScreenX = handlePosInWaveform - scrollState.value
+                            
+                            // Check if handle is in edge zone and trigger auto-scroll
+                            when {
+                                // Near left edge - scroll left
+                                handleScreenX < edgeZonePx && scrollState.value > 0 -> {
+                                    val proximity = 1f - (handleScreenX / edgeZonePx).coerceIn(0f, 1f)
+                                    val speed = baseScrollSpeed * proximity.coerceIn(0.3f, 1f)
+                                    onAutoScrollUpdate(true, -1, speed, 1) // 1 = start handle
+                                }
+                                // Near right edge - scroll right
+                                handleScreenX > (viewportWidth - edgeZonePx) && 
+                                scrollState.value < scrollState.maxValue -> {
+                                    val proximity = ((handleScreenX - (viewportWidth - edgeZonePx)) / edgeZonePx).coerceIn(0f, 1f)
+                                    val speed = baseScrollSpeed * proximity.coerceIn(0.3f, 1f)
+                                    onAutoScrollUpdate(true, 1, speed, 1) // 1 = start handle
+                                }
+                                // In safe zone - no auto-scroll
+                                else -> {
+                                    onAutoScrollUpdate(false, 0, 0f, 0)
+                                }
                             }
-                            // Note: No else - keep scrolling once started
                         }
                     },
                 contentAlignment = Alignment.Center
@@ -691,23 +740,7 @@ private fun WaveformWithSelection(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxHeight()
                 ) {
-                    // Top section - thin fading line
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .weight(1f)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        DeepPurple.copy(alpha = 0.4f),
-                                        DeepPurple
-                                    )
-                                )
-                            )
-                    )
-
-                    // Center grip ONLY - small draggable pill
+                    // Grip at TOP for start handler - small draggable pill
                     Box(
                         modifier = Modifier
                             .size(16.dp, 40.dp)
@@ -733,7 +766,7 @@ private fun WaveformWithSelection(
                         )
                     }
 
-                    // Bottom section - thin fading line
+                    // Bottom section - thin fading line (full height)
                     Box(
                         modifier = Modifier
                             .width(2.dp)
@@ -753,37 +786,73 @@ private fun WaveformWithSelection(
 
 
             // End Handle - positioned on waveform (full height, no time text inside)
-            val endOffsetX = (totalWidth - handleWidth) * selectionEnd
+            val endOffsetX = (totalWidth - handleWidth) * activeSelectionEnd
             Box(
                 modifier = Modifier
                     .offset(x = endOffsetX)
                     .width(handleWidth)
                     .fillMaxHeight()
-                    .pointerInput(totalWidthPx) {
+                    .pointerInput(totalWidthPx, edgeZonePx, baseScrollSpeed, viewportWidth) {
                         detectDragGestures(
-                            onDragEnd = { onAutoScrollRequest(0f, null) },
-                            onDragCancel = { onAutoScrollRequest(0f, null) }
+                            onDragStart = {
+                                // Start dragging - use local state
+                                isDraggingEnd = true
+                                localSelectionEnd = currentEndPosition
+                                previousScrollValue.floatValue = scrollState.value.toFloat()
+                            },
+                            onDragEnd = { 
+                                // Commit to ViewModel and stop auto-scroll
+                                isDraggingEnd = false
+                                onSelectionEndChange(localSelectionEnd)
+                                onAutoScrollUpdate(false, 0, 0f, 0)
+                            },
+                            onDragCancel = { 
+                                // Revert and stop
+                                isDraggingEnd = false
+                                localSelectionEnd = selectionEnd
+                                onAutoScrollUpdate(false, 0, 0f, 0)
+                            }
                         ) { change, dragAmount ->
                             change.consume()
                             
-                            // ALWAYS update selection from drag - this is the ONLY source
+                            // Detect scroll change during drag
+                            val currentScroll = scrollState.value.toFloat()
+                            val scrollDelta = currentScroll - previousScrollValue.floatValue
+                            previousScrollValue.floatValue = currentScroll
+                            
+                            // Update selection from drag + compensation for scroll
+                            // When scrolling right (+), handle should also move right (+) to stay in place
                             val dragProgress = dragAmount.x / totalWidthPx
-                            val newPos = (currentEndPosition + dragProgress).coerceIn(currentStartPosition + 0.02f, 1f)
-                            onSelectionEndChange(newPos)
-
-                            // Auto-scroll triggers ONLY on handle screen position
-                            // Scroll just moves the view, doesn't update selection
-                            val currentHandleX = newPos * totalWidthPx
-                            val screenX = currentHandleX - scrollState.value
-                            val threshold = 300f
-                            val scrollSpeed = 120f
-
-                            if (screenX < threshold) {
-                                onAutoScrollRequest(-scrollSpeed, null)
-                            } else if (screenX > viewportWidth - threshold) {
-                                onAutoScrollRequest(scrollSpeed, null)
+                            val scrollCompensation = scrollDelta / totalWidthPx
+                            val combinedProgress = dragProgress + scrollCompensation
+                            
+                            val newPos = (currentEndPosition + combinedProgress).coerceIn(currentStartPosition, 1f)
+                            localSelectionEnd = newPos
+                            
+                            // Calculate handle's screen position (relative to viewport)
+                            val handlePosInWaveform = newPos * totalWidthPx
+                            val handleScreenX = handlePosInWaveform - scrollState.value
+                            
+                            // Check if handle is in edge zone and trigger auto-scroll
+                            when {
+                                // Near left edge - scroll left
+                                handleScreenX < edgeZonePx && scrollState.value > 0 -> {
+                                    val proximity = 1f - (handleScreenX / edgeZonePx).coerceIn(0f, 1f)
+                                    val speed = baseScrollSpeed * proximity.coerceIn(0.3f, 1f)
+                                    onAutoScrollUpdate(true, -1, speed, 2) // 2 = end handle
+                                }
+                                // Near right edge - scroll right
+                                handleScreenX > (viewportWidth - edgeZonePx) && 
+                                scrollState.value < scrollState.maxValue -> {
+                                    val proximity = ((handleScreenX - (viewportWidth - edgeZonePx)) / edgeZonePx).coerceIn(0f, 1f)
+                                    val speed = baseScrollSpeed * proximity.coerceIn(0.3f, 1f)
+                                    onAutoScrollUpdate(true, 1, speed, 2) // 2 = end handle
+                                }
+                                // In safe zone - no auto-scroll
+                                else -> {
+                                    onAutoScrollUpdate(false, 0, 0f, 0)
+                                }
                             }
-                            // Note: No else - keep scrolling once started
                         }
                     },
                 contentAlignment = Alignment.Center
@@ -792,7 +861,7 @@ private fun WaveformWithSelection(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxHeight()
                 ) {
-                    // Top section - thin fading line
+                    // Top section - thin fading line (full height)
                     Box(
                         modifier = Modifier
                             .width(2.dp)
@@ -808,7 +877,7 @@ private fun WaveformWithSelection(
                             )
                     )
 
-                    // Center grip ONLY - small draggable pill
+                    // Grip at BOTTOM for end handler - small draggable pill
                     Box(
                         modifier = Modifier
                             .size(16.dp, 40.dp)
@@ -833,22 +902,6 @@ private fun WaveformWithSelection(
                             modifier = Modifier.size(20.dp)
                         )
                     }
-
-                    // Bottom section - thin fading line
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .weight(1f)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        SecondaryCyan,
-                                        SecondaryCyan.copy(alpha = 0.4f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
                 }
             }
         }
@@ -860,7 +913,7 @@ private fun WaveformWithSelection(
                 .height(16.dp)
         ) {
             // Start handle time label
-            val startLabelOffsetX = (totalWidth - handleWidth) * selectionStart
+            val startLabelOffsetX = (totalWidth - handleWidth) * activeSelectionStart
             Text(
                 text = FileUtils.formatDuration(startTimeMs),
                 style = MaterialTheme.typography.labelSmall,
@@ -873,7 +926,7 @@ private fun WaveformWithSelection(
             )
 
             // End handle time label
-            val endLabelOffsetX = (totalWidth - handleWidth) * selectionEnd
+            val endLabelOffsetX = (totalWidth - handleWidth) * activeSelectionEnd
             Text(
                 text = FileUtils.formatDuration(endTimeMs),
                 style = MaterialTheme.typography.labelSmall,
@@ -911,7 +964,7 @@ private fun SelectionControls(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(20.dp), // Increased from 16.dp to 20.dp
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Title
