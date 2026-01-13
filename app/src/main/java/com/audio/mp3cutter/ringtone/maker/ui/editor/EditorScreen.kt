@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -48,6 +49,9 @@ import kotlinx.coroutines.isActive
 @Composable
 fun EditorScreen(onNavigateBack: () -> Unit, viewModel: EditorViewModel = hiltViewModel()) {
         val uiState by viewModel.uiState.collectAsState()
+        var displayedZoom by remember {
+                mutableFloatStateOf(100f)
+        } // Actual zoom including auto-zoom
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                 // Ambient background glow
@@ -133,14 +137,14 @@ fun EditorScreen(onNavigateBack: () -> Unit, viewModel: EditorViewModel = hiltVi
                                                         onSeek = { progress ->
                                                                 viewModel.seekToProgress(progress)
                                                         },
-                                                        onSeekAndPlay = { progress ->
-                                                                viewModel.seekAndPlay(progress)
-                                                        },
-                                                        onSelectionStartChange = {
-                                                                viewModel.updateSelectionStart(it)
-                                                        },
-                                                        onSelectionEndChange = {
-                                                                viewModel.updateSelectionEnd(it)
+                                                        onSeekAndPlay = viewModel::seekAndPlay,
+                                                        onSelectionStartChange =
+                                                                viewModel::updateSelectionStart,
+                                                        onSelectionEndChange =
+                                                                viewModel::updateSelectionEnd,
+                                                        onEffectiveScaleChange = { effectiveScale ->
+                                                                displayedZoom =
+                                                                        effectiveScale * 100f
                                                         }
                                                 )
 
@@ -329,7 +333,8 @@ private fun WaveformSection(
         onSeek: (Float) -> Unit,
         onSeekAndPlay: (Float) -> Unit,
         onSelectionStartChange: (Float) -> Unit,
-        onSelectionEndChange: (Float) -> Unit
+        onSelectionEndChange: (Float) -> Unit,
+        onEffectiveScaleChange: (Float) -> Unit = {}
 ) {
         var scale by remember { mutableFloatStateOf(1f) }
         val scrollState = rememberScrollState()
@@ -545,7 +550,22 @@ private fun WaveformWithSelection(
 
         val baseBarCount = idealSampleCount.coerceAtMost(waveformData.size)
 
-        val displayedBars = (baseBarCount * scale).toInt().coerceIn(50, waveformData.size)
+        // Calculate minimum scale to fill screen width
+        val configuration = LocalConfiguration.current
+        val screenWidthDp = configuration.screenWidthDp.dp
+        val minWaveformWidth = screenWidthDp.value.dp - 32.dp // Account for padding
+        val naturalWidthValue = totalBarWidthDp.value * baseBarCount
+        val calculatedMinScale =
+                if (naturalWidthValue < minWaveformWidth.value) {
+                        (minWaveformWidth.value / naturalWidthValue).coerceAtLeast(1f)
+                } else {
+                        1f
+                }
+
+        // Apply minimum scale if current scale is less
+        val effectiveScale = scale.coerceAtLeast(calculatedMinScale)
+
+        val displayedBars = (baseBarCount * effectiveScale).toInt().coerceIn(50, waveformData.size)
         val totalWidth = totalBarWidthDp * displayedBars
 
         val maxAmplitude =
