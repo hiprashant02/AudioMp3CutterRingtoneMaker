@@ -91,7 +91,7 @@ fun AboutScreen(
             
             // App Name
             Text(
-                text = "Audio Studio",
+                text = "Audio Editor",
                 color = Color.White,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
@@ -134,7 +134,7 @@ fun AboutScreen(
                 onClick = {
                     val intent = Intent(Intent.ACTION_SENDTO).apply {
                         data = Uri.parse("mailto:letsdevelop7@gmail.com")
-                        putExtra(Intent.EXTRA_SUBJECT, "Audio Studio - Feedback")
+                        putExtra(Intent.EXTRA_SUBJECT, "Audio Editor - Feedback")
                     }
                     context.startActivity(intent)
                 }

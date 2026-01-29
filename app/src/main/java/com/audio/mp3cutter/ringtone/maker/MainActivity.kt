@@ -56,8 +56,8 @@ class MainActivity : ComponentActivity() {
                                                         onShareApp = {
                                                                 val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                                                         type = "text/plain"
-                                                                        putExtra(android.content.Intent.EXTRA_SUBJECT, "Audio Studio - MP3 Cutter & Ringtone Maker")
-                                                                        putExtra(android.content.Intent.EXTRA_TEXT, "Check out Audio Studio - the best MP3 cutter & ringtone maker!\n\nhttps://play.google.com/store/apps/details?id=${packageName}")
+                                                                        putExtra(android.content.Intent.EXTRA_SUBJECT, "Audio Editor - MP3 Cutter & Ringtone Maker")
+                                                                        putExtra(android.content.Intent.EXTRA_TEXT, "Check out Audio Editor - the best MP3 cutter & ringtone maker!\n\nhttps://play.google.com/store/apps/details?id=${packageName}")
                                                                 }
                                                                 startActivity(android.content.Intent.createChooser(shareIntent, "Share App"))
                                                         },

@@ -76,7 +76,7 @@ fun HomeScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Audio Studio",
+                            text = "Audio Editor",
                             style = MaterialTheme.typography.displaySmall,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
@@ -196,7 +196,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.weight(1f))
                         ModernToolCard(
                             title = "Rate Us",
-                            subtitle = "⭐ 5 Stars",
+                            subtitle = "🤍",
                             icon = Icons.Default.Star,
                             iconGradient = listOf(Color(0xFFEAB308), Color(0xFFFACC15)),
                             onClick = onRateApp,
@@ -447,10 +447,10 @@ fun ModernToolCard(
     Box(
         modifier = modifier
             .aspectRatio(0.95f)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(MatteSurface)
             .clickable { onClick() }
-            .padding(16.dp)
+            .padding(12.dp) // Reduced padding
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -460,8 +460,8 @@ fun ModernToolCard(
             // Gradient Icon Box
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(36.dp) // Reduced from 42.dp
+                    .clip(RoundedCornerShape(10.dp))
                     .background(Brush.linearGradient(iconGradient)),
                 contentAlignment = Alignment.Center
             ) {
@@ -469,22 +469,28 @@ fun ModernToolCard(
                     imageVector = icon,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(15.dp) // Reduced from 22.dp
                 )
             }
             
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall, // Smaller style
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp, // Explicit smaller size
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
-                    maxLines = 1
+                    fontSize = 11.sp, // Explicit smaller size
+                    lineHeight = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -496,7 +502,7 @@ fun ModernToolCard(
             tint = Color.White.copy(alpha = 0.1f),
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(16.dp)
+                .size(14.dp) // Reduced size
         )
     }
 }
