@@ -43,9 +43,9 @@ class AudioRepository @Inject constructor(
             MediaStore.Audio.Media.DATA
         )
 
-        // Base selection: Music files > 5s
-        var selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 5000"
-        
+        // Base selection: Music files with any duration > 0
+        var selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
+
         // Append search query if present
         var selectionArgs: Array<String>? = null
         if (!query.isNullOrBlank()) {
@@ -168,6 +168,146 @@ class AudioRepository @Inject constructor(
                                 id = id,
                                 title = title ?: "Unknown",
                                 artist = if (artist == "<unknown>") "Unknown Artist" else artist ?: "Unknown Artist",
+                                duration = duration,
+                                size = size,
+                                path = path,
+                                contentUri = contentUri
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        return@withContext audioList
+    }
+
+    /**
+     * Gets recently exported/processed audio files from the app's output directory.
+     * Searches for files that were created or modified by AudioStudio.
+     * 
+     * @param limit Maximum number of recent projects to return
+     * @return List of recent AudioModel projects, sorted by date modified descending
+     */
+    suspend fun getRecentProjects(limit: Int = 10): List<AudioModel> = withContext(Dispatchers.IO) {
+        val audioList = mutableListOf<AudioModel>()
+        val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_MODIFIED
+        )
+
+        // Search for files in the Music folder that were likely created by this app
+        // Look for files with "AudioStudio" in the path or typical export patterns
+        val selection = """
+            ${MediaStore.Audio.Media.DURATION} > 0 AND (
+                ${MediaStore.Audio.Media.DATA} LIKE ? OR 
+                ${MediaStore.Audio.Media.DATA} LIKE ? OR 
+                ${MediaStore.Audio.Media.DATA} LIKE ? OR
+                ${MediaStore.Audio.Media.DATA} LIKE ?
+            )
+        """.trimIndent()
+
+        val selectionArgs = arrayOf(
+            "%AudioStudio%",
+            "%/Music/Audio%",
+            "%_cut.%",
+            "%_merged.%"
+        )
+
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val args = android.os.Bundle().apply {
+                    putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
+                    putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, 
+                        arrayOf(MediaStore.Audio.Media.DATE_MODIFIED))
+                    putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION, 
+                        android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
+                    putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+                    putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+                }
+                
+                context.contentResolver.query(collection, projection, args, null)?.use { cursor ->
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                    val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                    val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                    val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(idColumn)
+                        val title = cursor.getString(titleColumn)
+                        val artist = cursor.getString(artistColumn)
+                        val duration = cursor.getLong(durationColumn)
+                        val size = cursor.getLong(sizeColumn)
+                        val path = cursor.getString(dataColumn)
+
+                        val contentUri = ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        ).toString()
+
+                        audioList.add(
+                            AudioModel(
+                                id = id,
+                                title = title ?: "Unknown",
+                                artist = if (artist == "<unknown>") "AudioStudio Project" else artist ?: "AudioStudio Project",
+                                duration = duration,
+                                size = size,
+                                path = path,
+                                contentUri = contentUri
+                            )
+                        )
+                    }
+                }
+            } else {
+                val sortOrder = "${MediaStore.Audio.Media.DATE_MODIFIED} DESC LIMIT $limit"
+                
+                context.contentResolver.query(
+                    collection,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    sortOrder
+                )?.use { cursor ->
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                    val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                    val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                    val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(idColumn)
+                        val title = cursor.getString(titleColumn)
+                        val artist = cursor.getString(artistColumn)
+                        val duration = cursor.getLong(durationColumn)
+                        val size = cursor.getLong(sizeColumn)
+                        val path = cursor.getString(dataColumn)
+
+                        val contentUri = ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        ).toString()
+
+                        audioList.add(
+                            AudioModel(
+                                id = id,
+                                title = title ?: "Unknown",
+                                artist = if (artist == "<unknown>") "AudioStudio Project" else artist ?: "AudioStudio Project",
                                 duration = duration,
                                 size = size,
                                 path = path,

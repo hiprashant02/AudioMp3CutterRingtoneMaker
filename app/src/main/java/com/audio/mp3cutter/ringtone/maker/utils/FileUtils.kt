@@ -10,19 +10,14 @@ object FileUtils {
     }
 
     // Format with decimal precision (0.1 seconds) for editing accuracy
+    // Format: mm:ss:d where d is deciseconds (0.1 second increments)
     fun formatDurationWithDecimal(durationMs: Long): String {
-        val totalSeconds = durationMs / 1000.0
-        val minutes = (totalSeconds / 60).toInt()
+        val totalSeconds = (durationMs / 1000).toInt()
+        val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
-        val secondsInt = seconds.toInt()
-        val secondsDecimal = ((seconds - secondsInt) * 10).toInt()
-        return String.format(
-                Locale.getDefault(),
-                "%02d:%02d.%01d",
-                minutes,
-                secondsInt,
-                secondsDecimal
-        )
+        // Get deciseconds directly from milliseconds (more precise than floating-point)
+        val deciseconds = ((durationMs % 1000) / 100).toInt()
+        return String.format(Locale.getDefault(), "%02d:%02d:%01d", minutes, seconds, deciseconds)
     }
 
     fun formatFileSize(sizeBytes: Long): String {

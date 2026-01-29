@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -72,6 +73,7 @@ object PermissionUtils {
 fun FileBrowserScreen(
         onNavigateBack: () -> Unit,
         onAudioSelected: (AudioModel) -> Unit,
+        onRecordVoice: () -> Unit = {},
         viewModel: FileBrowserViewModel = hiltViewModel()
 ) {
         val context = LocalContext.current
@@ -322,6 +324,12 @@ fun FileBrowserScreen(
                                                         ), // More top padding
                                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
+                                                // Record Voice Option
+                                                item {
+                                                        RecordVoiceCard(onClick = onRecordVoice)
+                                                        Spacer(modifier = Modifier.height(12.dp))
+                                                }
+
                                                 // Prominent Import Option
                                                 item {
                                                         ImportAudioCard(
@@ -940,6 +948,70 @@ fun ImportAudioCard(onClick: () -> Unit) {
                                         Icons.AutoMirrored.Filled
                                                 .ArrowBack, // Using Arrow for "Go" indication,
                                 // rotated
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp).rotate(180f)
+                        )
+                }
+        }
+}
+
+@Composable
+fun RecordVoiceCard(onClick: () -> Unit) {
+        Box(
+                modifier =
+                        Modifier.fillMaxWidth()
+                                .height(80.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                        brush =
+                                                Brush.linearGradient(
+                                                        colors =
+                                                                listOf(
+                                                                        Color(0xFFEC4899),
+                                                                        Color(0xFFF43F5E)
+                                                                ) // Pink -> Red (Recorder colors)
+                                                )
+                                )
+                                .clickable { onClick() }
+                                .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart
+        ) {
+                Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                ) {
+                        Box(
+                                modifier =
+                                        Modifier.size(40.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                        ) {
+                                Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                                Text(
+                                        text = "Record Voice",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                        text = "Create ringtone from your voice",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                )
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp).rotate(180f)
