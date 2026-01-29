@@ -117,6 +117,14 @@ fun ProjectsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Banner Ad
+                    item {
+                        com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                            adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+
                     items(uiState.projects) { project ->
                         ProjectCard(
                             audio = project,

@@ -324,6 +324,14 @@ fun FileBrowserScreen(
                                                         ), // More top padding
                                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
+                                                // Banner Ad
+                                                item {
+                                                    com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                                                        adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                                                        modifier = Modifier.padding(bottom = 12.dp)
+                                                    )
+                                                }
+
                                                 // Record Voice Option
                                                 item {
                                                         RecordVoiceCard(onClick = onRecordVoice)

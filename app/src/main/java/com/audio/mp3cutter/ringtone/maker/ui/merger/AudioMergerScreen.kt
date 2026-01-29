@@ -160,6 +160,12 @@ fun AudioMergerScreen(
                         }
 
                         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                                // Banner Ad
+                                com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                                    adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 8.dp)
+                                )
+
                                 // Add Songs Button
                                 PremiumAddButton(onClick = onAddSong)
 

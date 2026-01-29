@@ -61,7 +61,7 @@ fun HomeScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize(),
-            contentPadding = PaddingValues(top = 24.dp, bottom = 32.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             
@@ -110,6 +110,14 @@ fun HomeScreen(
             // Solid Gradient Hero Card
             item {
                 SolidHeroCard(onClick = onOpenAudio)
+            }
+
+            // Banner Ad
+            item {
+                com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                    adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
             }
 
             // Tools Section

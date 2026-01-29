@@ -205,6 +205,12 @@ fun RingtonePickerScreen(
                                                 )
                                         }
                                 }
+
+                                // Banner Ad
+                                com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                                    adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                                    modifier = Modifier.padding(top = 24.dp)
+                                )
                         }
 
                         // SIM Selection Dialog

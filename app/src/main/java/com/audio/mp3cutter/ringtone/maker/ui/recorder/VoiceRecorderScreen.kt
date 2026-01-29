@@ -116,6 +116,12 @@ fun VoiceRecorderScreen(
                                 }
                         )
 
+                        // Banner Ad
+                        com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                            adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+
                         // Main Content
                         Column(
                                 modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),

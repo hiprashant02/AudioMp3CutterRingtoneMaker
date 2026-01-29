@@ -68,6 +68,14 @@ fun ExportScreen(
 ) {
         val context = LocalContext.current
 
+        // Load Interstitial Ad
+        LaunchedEffect(Unit) {
+            com.audio.mp3cutter.ringtone.maker.ui.ads.InterstitialAdManager.loadAd(
+                context,
+                com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_INTERSTITIAL_ID
+            )
+        }
+
         var filename by remember {
                 val baseName = audio.title.replace(Regex("[^a-zA-Z0-9_\\-\\s]"), "").trim()
                 val timestamp = System.currentTimeMillis() % 10000 // Last 4 digits
@@ -395,7 +403,12 @@ fun ExportScreen(
                         }
 
                         Spacer(modifier = Modifier.weight(1f))
-                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        // Banner Ad - Above Export Button
+                        com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                            adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
 
                         // Export Button - Clean
                         Box(
@@ -412,19 +425,13 @@ fun ExportScreen(
                                                                 filename.isNotBlank() &&
                                                                         !isExporting
                                                 ) {
+                                                    val activity = context as? android.app.Activity
+                                                    val startExport = {
                                                         // Verify input file exists
                                                         val inputFile = File(audio.path)
-                                                        if (!inputFile.exists() || inputFile.length() == 0L) {
-                                                                Toast.makeText(
-                                                                        context,
-                                                                        "Source audio file not found",
-                                                                        Toast.LENGTH_LONG
-                                                                ).show()
-                                                                return@clickable
-                                                        }
-
-                                                        isExporting = true
-                                                        exportProgress = 0
+                                                        if (inputFile.exists() && inputFile.length() > 0L) {
+                                                            isExporting = true
+                                                            exportProgress = 0
 
                                                         // Write to cache directory first (where we have write permission)
                                                         val cacheOutputFile = File(
@@ -520,6 +527,20 @@ fun ExportScreen(
                                                                                 }
                                                                         }
                                                         )
+                                                        } else {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Source audio file not found",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+                                                    }
+
+                                                    if (activity != null) {
+                                                        com.audio.mp3cutter.ringtone.maker.ui.ads.InterstitialAdManager.showAd(activity) { startExport() }
+                                                    } else {
+                                                        startExport()
+                                                    }
                                                 },
                                 contentAlignment = Alignment.Center
                         ) {

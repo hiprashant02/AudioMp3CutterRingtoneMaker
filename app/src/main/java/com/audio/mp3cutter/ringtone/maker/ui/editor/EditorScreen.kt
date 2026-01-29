@@ -253,6 +253,11 @@ fun EditorScreen(
                 audioArtist = uiState.audio?.artist ?: ""
             )
 
+            // Bottom Banner Ad
+            com.audio.mp3cutter.ringtone.maker.ui.ads.BannerAd(
+                adUnitId = com.audio.mp3cutter.ringtone.maker.BuildConfig.ADMOB_BANNER_ID
+            )
+
             // Processing Dialog Overlay
             if (uiState.isProcessing) {
                 ProcessingDialog(
